@@ -1,8 +1,12 @@
 
 from  langchain_groq import ChatGroq
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
-api_key = "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"
+api_key = os.getenv('GROQ_API_KEY')
 
 def get_model():
     llm = ChatGroq(
