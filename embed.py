@@ -24,6 +24,7 @@ def load_data(csv_path):
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()  # Remove extra spaces in column names
     df['Error Message'] = df[['Error Type', 'Description', 'Possible Causes', 'Solution']].astype(str).agg(' | '.join, axis=1)
+    
     return df
 
 # Function to create Normalized Embeddings
