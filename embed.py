@@ -12,9 +12,8 @@ from langchain.schema import Document
 from llm_config import get_model
 import os
 
-# Using a consistent embedding model
-EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2'
-embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+# Using a embedding model
+embedding_model = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
 
 # Providing title of the app
 st.title("🔍 DevOps Error Resolution Assistant")
@@ -23,7 +22,7 @@ st.title("🔍 DevOps Error Resolution Assistant")
 def load_data(csv_path):
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()  # Remove extra spaces in column names
-    df['Error Message'] = df[['Error Type', 'Description', 'Possible Causes', 'Solution']].astype(str).agg(' | '.join, axis=1)
+    df['Error Message'] = df[['Error Type', 'Description', 'Possible Causes', 'Solution']].astype(str).agg('-'.join, axis=1)
     
     return df
 
@@ -70,6 +69,8 @@ def initialize_llm():
         input_variables=["context", "question"],
         template="""
         You are a DevOps assistant. Use the provided context to help resolve user errors.
+        If there is no context. Then provide the solution as per your knowledge.
+        If a user asks to correct the script or command then correct it. Check twice before giving the solution and take care that only provide the corrected solution and in the last where it commited the errors and where you made changes to the error.
         
         Context: {context}
         
