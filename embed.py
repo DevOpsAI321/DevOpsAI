@@ -12,24 +12,24 @@ from langchain.schema import Document
 from llm_config import get_model
 import os
 
-# Using a embedding model
+# Defining embedding model for vectorization
 embedding_model = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
 
-# Providing title of the app
 st.title("🔍 DevOps Error Resolution Assistant")
 
-# Function to load csv dataset
+# Function to load csv file
 def load_data(csv_path):
     df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip()  # Remove extra spaces in column names
+    df.columns = df.columns.str.strip()  # Removing extra spaces in column names
+    # Creating a new column named 'Error Message' that combines all other columns to store them as embedings
     df['Error Message'] = df[['Error Type', 'Description', 'Possible Causes', 'Solution']].astype(str).agg('-'.join, axis=1)
-    
     return df
 
 # Function to create Normalized Embeddings
 def create_embeddings(df):
     vectors = np.array(embedding_model.embed_documents(df['Error Message'].tolist()), dtype='float32')
-    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)  # Normalize embeddings
+    # Normalizing the embeddings
+    vectors = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)  # Vectors are normalized to compare the vectors using Cosine Similarity
     return vectors
 
 # Function to store embedings in FAISS database using cosine similarity
@@ -39,30 +39,32 @@ def store_embeddings_faiss(df, vectors, faiss_index_path):
     index.add(vectors)
     faiss.write_index(index, faiss_index_path)
 
-    documents = [Document(page_content=text) for text in df['Error Message'].tolist()]
+    documents = [Document(page_content=text) for text in df['Error Message'].tolist()] # Converting text into document object
     index_to_docstore_id = {i: str(i) for i in range(len(documents))}
 
+    docstore = {str(i): document for i, document in enumerate(documents)}
+
     vectorstore = FAISS(
-        embedding_function=embedding_model,
-        index=index,
-        docstore=InMemoryDocstore({str(i): doc for i, doc in enumerate(documents)}),
-        index_to_docstore_id=index_to_docstore_id
+        embedding_function=embedding_model,          # For query
+        index=index,                                 # Actual embeddings
+        docstore=InMemoryDocstore(docstore),
+        index_to_docstore_id=index_to_docstore_id    # Mapping docstore id to the FAISS index indices
     )
     return vectorstore
 
-# Step 4: Load FAISS Index with Dimension Check
+# Function to load FAISS Documents
 def load_faiss_index(faiss_index_path, df):
     if os.path.exists(faiss_index_path):
         index = faiss.read_index(faiss_index_path)
-        expected_dim = create_embeddings(df).shape[1]
-        if index.d != expected_dim:
-            st.warning(f"⚠️ FAISS index dimension mismatch! Rebuilding index...")
+        expected_dimension = create_embeddings(df).shape[1]
+        if index.d != expected_dimension:
+            st.warning(f"FAISS index dimension mismatch! Rebuilding index...")
             os.remove(faiss_index_path)
-            return None  # Force recreation
+            return None  # Force recreation if dimensions doesn't match
         return index
-    return None
+    return None          # Force recreation if file doesn't exist
 
-# Step 5: Initialize LLM
+# Initializing the LLM (Google Gemma) model
 def initialize_llm():
     llm = get_model()
     prompt_template = PromptTemplate(
@@ -81,7 +83,7 @@ def initialize_llm():
     )
     return llm, prompt_template
 
-# Step 6: Setup Retrieval-based QA System
+# Setup Retrieval-based QA System (pipeline) - combines FAISS and LLM model
 def setup_retrieval_qa(vectorstore):
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
     qa_chain = RetrievalQA.from_chain_type(
@@ -91,12 +93,14 @@ def setup_retrieval_qa(vectorstore):
     )
     return qa_chain
 
-# Load Data and Setup FAISS
+# Loading csv data and setting up FAISS
 csv_path = "./sample.csv"
 faiss_index_path = "faiss_index.bin"
+
 df = load_data(csv_path)
 
 index = load_faiss_index(faiss_index_path, df)
+
 if index is None:
     vectors = create_embeddings(df)
     vectorstore = store_embeddings_faiss(df, vectors, faiss_index_path)
